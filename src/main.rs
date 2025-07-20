@@ -1,5 +1,5 @@
-use rand::{ SeedableRng };
-use rand::rngs::StdRng;
+use rand::{ Rng, SeedableRng };
+use rand::rngs::SmallRng;
 use std::fs::File;
 use std::io::{ Write, BufWriter };
 use serde_json;
@@ -38,8 +38,10 @@ struct Pairs {
 }
 
 impl Pairs {
-    fn new() -> Self {
-        Pairs { pairs: vec![] }
+    fn with_capacity(capacity: usize) -> Self {
+        Pairs {
+            pairs: Vec::with_capacity(capacity)
+        }
     }
 
     fn push(&mut self, pair: Pair) {
@@ -54,10 +56,14 @@ impl Pairs {
     }
 }
 
+const DEGREES_TO_RADIANS: f64 = 0.01745329251994329577;
+
+#[inline]
 fn radians_from_degrees(degrees: f64) -> f64 {
-    0.01745329251994329577 * degrees
+    DEGREES_TO_RADIANS * degrees
 }
 
+#[inline]
 fn reference_haversine(pair: &Pair, earth_radius: f64) -> f64 {
     let mut lat0 = pair.x0;
     let lng0 = pair.y0;
@@ -76,14 +82,20 @@ fn reference_haversine(pair: &Pair, earth_radius: f64) -> f64 {
 }
 
 fn save_run_metrics(distances: &Vec<f64>, seed: u64, num_pairs: u64, cumu_distance: f64) -> Result<(), Box<dyn std::error::Error>> {
-    let mut file = File::create("haversine_metrics.txt")?;
-    writeln!(file, "Seed: {}", seed)?;
-    writeln!(file, "Points: {}", num_pairs)?;
-    writeln!(file, "Est Distance: {}", cumu_distance)?;
+    { 
+        let mut file = File::create("haversine_metrics.txt")?;
+        writeln!(file, "Seed: {}", seed)?;
+        writeln!(file, "Points: {}", num_pairs)?;
+        writeln!(file, "Est Distance: {}", cumu_distance)?;
+    }
 
-    let file = File::create("haversine.f64")?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, distances)?;
+    {
+        let file = File::create("haversine.f64")?;
+        let mut writer = BufWriter::new(file);
+        for &distance in distances {
+            writer.write_all(&distance.to_le_bytes())?;
+        }
+    }
 
     println!("Seed: {}", seed);
     println!("Points: {}", num_pairs);
@@ -95,12 +107,12 @@ fn save_run_metrics(distances: &Vec<f64>, seed: u64, num_pairs: u64, cumu_distan
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let num_pairs = 10000000;
     let mut cumu_distance: f64 = 0.0;
-    let seed = 42;
 
-    let mut rng_gen = StdRng::seed_from_u64(seed);
+    let seed: u64 = rand::random();
+    let mut rng_gen = SmallRng::seed_from_u64(seed);
 
-    let mut pairs = Pairs::new();
-    let mut distances: Vec<f64> = vec![];
+    let mut pairs = Pairs::with_capacity(num_pairs.try_into().unwrap());
+    let mut distances: Vec<f64> = Vec::with_capacity(num_pairs.try_into().unwrap());
     for _ in 0..num_pairs {
         let new_pair = Pair::random_new(&mut rng_gen);
         pairs.push(new_pair.clone());
