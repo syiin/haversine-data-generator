@@ -1,12 +1,20 @@
 mod generator;
+mod parser;
 
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 use generator::{ Pairs, Pair };
 use generator::{ reference_haversine, save_run_metrics };
+use parser::{ parse_json, JsonItem };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let num_pairs = 100;
+    generate_pairs();
+    parse_json("haversine.json".to_string());
+    Ok(())
+}
+
+fn generate_pairs() -> Result<(), Box<dyn std::error::Error>> {
+    let num_pairs = 1;
     let mut cumu_distance: f64 = 0.0;
 
     let seed: u64 = rand::random();
