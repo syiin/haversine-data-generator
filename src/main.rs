@@ -5,11 +5,17 @@ use rand::rngs::SmallRng;
 use rand::SeedableRng;
 use generator::{ Pairs, Pair };
 use generator::{ reference_haversine, save_run_metrics };
-use parser::{ parse_json, JsonItem };
+use parser::{ parse_file, JsonItem };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate_pairs();
-    parse_json("haversine.json".to_string());
+    let file = std::fs::File::open("haversine.json").unwrap();
+    let tokens = parse_file(file);
+    println!("Token length: {}", tokens.len());
+    for token in tokens {
+        println!("{}", token.format());
+    }
+    // parse_json("haversine.json".to_string());
     Ok(())
 }
 

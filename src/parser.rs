@@ -4,7 +4,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use std::string::String;
 
-enum Token {
+pub enum Token {
     OpenBrace,
     CloseBrace,
     OpenBracket,
@@ -17,80 +17,103 @@ enum Token {
     Null,
 }
 
-struct Tokeniser {
-    pos: usize,
-    reader: BufReader<File>,
-    tokens: Vec<Token>,
+impl Token {
+    pub fn format(&self) -> String {
+        match self {
+            Token::OpenBrace => "{".to_string(),
+            Token::CloseBrace => "}".to_string(),
+            Token::OpenBracket => "[".to_string(),
+            Token::CloseBracket => "]".to_string(),
+            Token::Comma => ",".to_string(),
+            Token::Colon => ":".to_string(),
+            Token::StringContent(s) => s.to_string(),
+            Token::Number(n) => n.to_string(),
+            Token::Boolean(b) => b.to_string(),
+            Token::Null => "null".to_string(),
+        }
+    }
 }
 
-impl Tokeniser {
-    pub fn new(file_path: String) -> Self {
-        let file = File::open(file_path).unwrap();
-        let reader = BufReader::new(file);
-        Tokeniser {
-            pos: 0,
-            reader,
-            tokens: Vec::new(),
-        }
-    }
+pub fn parse_file(file: File) -> Vec<Token> {
+    let mut output = Vec::new();
+    let mut string = String::new();
+    let mut in_string = false;
 
-    pub fn parse(file: File) -> Vec<Token> {
-        let mut output = Vec::new();
-        let mut string = String::new();
-        let mut in_string = false;
+    let mut digit = String::new();
+    let mut in_digit = false;
 
-        let mut digit = String::new();
-        let mut in_digit = false;
-
-        for byte_result in file.bytes() {
-            let byte = byte_result.unwrap();
-            if in_string {
-                string.push(byte as char);
+    let reader = BufReader::new(file);
+    for byte_result in reader.bytes() {
+        let byte = match byte_result {
+            Ok(byte) => byte,
+            Err(err) => {
+                println!("Error: {}", err);
                 continue;
             }
-            if in_digit {
-                digit.push(byte as char);
-                continue;
+        };
+
+        match byte {
+            b'{' => output.push(Token::OpenBrace),
+            b'}' => {
+                if !digit.is_empty() {
+                    output.push(Token::Number(digit.parse().unwrap()));
+                    digit.clear();
+                }
+                in_digit = false;
+                output.push(Token::CloseBrace);
             }
-            match byte {
-                b'{' => {
-                    output.push(Token::OpenBrace);
+            b'[' => output.push(Token::OpenBracket),
+            b']' => {
+                if !digit.is_empty() {
+                    output.push(Token::Number(digit.parse().unwrap()));
+                    digit.clear();
                 }
-                b'}' => {
-                    in_digit = false;
-                    output.push(Token::CloseBrace);
-                }
-                b'[' => {
-                    output.push(Token::OpenBracket);
-                }
-                b']' => {
-                    in_digit = false;
-                    output.push(Token::CloseBracket);
-                }
-                b':' => {
-                    output.push(Token::Colon)
-                }
-                b',' => {
-                    in_digit = false;
-                    output.push(Token::Comma)
-                }
-                b'"' => {
-                    if in_string {
-                        let tmp_string = string.clone();
-                        in_string = false;
-                        output.push(Token::StringContent(tmp_string));
-                        string.clear();
+                in_digit = false;
+                output.push(Token::CloseBracket);
+            }
+            b':' => output.push(Token::Colon),
+            b',' => {
+                if !digit.is_empty() {
+                    if let Ok(n) = digit.parse() {
+                        output.push(Token::Number(n));
+                        digit.clear();
                     } else {
-                        in_string = false;
+                        println!("Error parsing number: {}", digit);
+                        continue;
                     }
                 }
-                _ => {
-                    continue;
+                in_digit = false;
+                output.push(Token::Comma)
+            },
+            b'"' => {
+                if in_string {
+                    string.push(byte as char);
+                    let tmp_string = string.clone();
+                    in_string = false;
+                    output.push(Token::StringContent(tmp_string));
+                    string.clear();
+                } else {
+                    string.push(byte as char);
+                    in_string = true;
                 }
             }
+            b'0'..=b'9' | b'-' | b'.' => {
+                if in_string { 
+                    string.push(byte as char);
+                    continue;
+                }
+                digit.push(byte as char);
+                in_digit = true;
+            }
+            _ => {
+                if in_string {
+                    string.push(byte as char);
+                }
+                continue;
+            },
         }
-        return output;
     }
+    return output;
 }
 
 enum StackItem {
