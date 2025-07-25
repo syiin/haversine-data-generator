@@ -37,10 +37,10 @@ impl Tokeniser {
     pub fn parse(file: File) -> Vec<Token> {
         let mut output = Vec::new();
         let mut string = String::new();
-        let in_string = false;
+        let mut in_string = false;
 
         let mut digit = String::new();
-        let open_digit = false;
+        let mut in_digit = false;
 
         for byte_result in file.bytes() {
             let byte = byte_result.unwrap();
