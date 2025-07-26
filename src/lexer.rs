@@ -27,8 +27,8 @@ impl Token {
             Token::Colon => ":".to_string(),
             Token::StringContent(s) => s.to_string(),
             Token::Number(n) => n.to_string(),
-            Token::Boolean(b) => b.to_string(),
-            Token::Null => "null".to_string(),
+            // Token::Boolean(b) => b.to_string(),
+            // Token::Null => "null".to_string(),
         }
     }
 }
