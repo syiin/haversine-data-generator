@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::{self, BufReader, BufRead, Read};
-use std::collections::HashMap;
 use std::string::String;
 
+#[derive(Clone)]
 pub enum Token {
     OpenBrace,
     CloseBrace,

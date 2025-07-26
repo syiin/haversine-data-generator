@@ -1,72 +1,76 @@
-use std::fs::File;
-use std::io::Read;
 use std::collections::HashMap;
-use std::string::String;
-enum StackItem {
-    Token,
-    JsonItem,
+use crate::lexer::Token;
+
+pub enum StateItem {
+    InObject,
+    InArray,
+    ExpectingKey,
+    ExpectingColon,
+    ExpectingValue,
+    ExpectingCommaOrEnd,
 }
 
+pub enum JsonPrimitive {
+    String(String),
+    Number(f64),
+}
 
 pub enum JsonValue {
-    Integer(i64),
-    Float(f64),
-    String(String),
-    Boolean(bool),
+    Primitive(JsonPrimitive),
+    Object(HashMap<String, Option<JsonValue>>),
     Array(Vec<JsonValue>),
-    Object(HashMap<String, JsonValue>),
-    Null,
 }
 
-pub struct JsonItem {
-    pub key: String,
-    pub value: JsonValue,
-}
+pub fn parse_tokens(tokens: &[Token]){
+    let mut state_stack: Vec<StateItem> = Vec::new();
+    let mut parser_stack: Vec<JsonValue> = Vec::new();
 
-impl JsonItem {
-    pub fn new(key: String, value: JsonValue) -> Self {
-        JsonItem {
-            key, value
-        }
-    }
-}
+    state_stack.push(StateItem::ExpectingValue);
 
-pub fn parse_json(file_path: String){
-    let mut stack: Vec<u8> = Vec::new();
-    let mut open_quotes = false;
-    let file = File::open(file_path).unwrap();
-    for byte_result in file.bytes() {
-        match byte_result {
-            Ok(byte) => {
-                if byte == b'{' {
-                    stack.push(byte);
-                } 
-                if byte == b'"' {
-                    open_quotes = !open_quotes;
-                    if open_quotes {
-                        stack.push(byte);
-                    } else {
-                        collate_string(&mut stack);
-                    }
-                }
-                else {
-                    continue;
+    for token in tokens {
+        let current_state = state_stack.last().unwrap();
+        
+        match (current_state, &token) {
+            (StateItem::ExpectingValue, Token::OpenBrace) => {
+                state_stack.pop();
+                state_stack.push(StateItem::InObject);
+                state_stack.push(StateItem::ExpectingKey);
+                parser_stack.push(JsonValue::Object(HashMap::new()));
+            },
+            (StateItem::ExpectingKey, Token::StringContent(s)) => {
+                state_stack.pop();
+                state_stack.push(StateItem::ExpectingColon);
+                if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
+                    map.insert(s.clone(), None);
                 }
             },
-            Err(err) => {
-                println!("Error: {}", err);
-            }
+            (StateItem::ExpectingColon, Token::Colon) => {
+                state_stack.pop();
+                state_stack.push(StateItem::ExpectingValue);
+            },
+            (StateItem::ExpectingValue, Token::StringContent(s)) => {
+                state_stack.pop();
+                state_stack.push(StateItem::ExpectingCommaOrEnd);
+                if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
+                    let key = map.keys().last().unwrap().clone();
+                    map.insert(key, Some(JsonValue::Primitive(JsonPrimitive::String(s.clone()))));
+                }
+            },
+            _ => todo!(),
         }
-
     }
+    
 }
 
-fn collate_string(stack: &mut Vec<u8>) -> JsonValue {
-    let mut string = String::new();
-    let mut current_byte = stack.pop().unwrap();
-    while current_byte != b'"' {
-        current_byte = stack.pop().unwrap();
-        string.push(current_byte as char);
-    }
-    JsonValue::String(string)
-}
+// fn token_to_state(token: &Token) -> StateItem {
+//     match token {
+//         Token::OpenBrace => StateItem::StartObject,
+//         Token::CloseBrace => StateItem::EndObject,
+//         Token::OpenBracket => StateItem::StartArray,
+//         Token::CloseBracket => StateItem::EndArray,
+//         Token::Comma => StateItem::ArrayValue,
+//         Token::Colon => StateItem::Key,
+//         Token::StringContent(_) => StateItem::PrimitiveValue,
+//         Token::Number(_) => StateItem::PrimitiveValue,
+//     }
+// }
