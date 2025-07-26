@@ -1,11 +1,12 @@
 mod generator;
 mod parser;
+mod lexer;
 
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 use generator::{ Pairs, Pair };
 use generator::{ reference_haversine, save_run_metrics };
-use parser::{ parse_file, JsonItem };
+use lexer::{ parse_file };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate_pairs();
@@ -20,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn generate_pairs() -> Result<(), Box<dyn std::error::Error>> {
-    let num_pairs = 1;
+    let num_pairs = 2;
     let mut cumu_distance: f64 = 0.0;
 
     let seed: u64 = rand::random();
