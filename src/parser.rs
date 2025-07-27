@@ -74,9 +74,12 @@ pub fn parse_tokens(tokens: &[Token]){
             (StateItem::ExpectingCommaOrEndObject, Token::CloseBrace) => {
                 state_stack.pop();
                 state_stack.push(StateItem::ExpectingValue);
+            },
+            (StateItem::ExpectingValue, Token::OpenBracket) => {
+
             }
-            _ => { continue },
-        }
+            _ => continue,
+            }
     }
 }
 
