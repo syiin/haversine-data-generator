@@ -17,19 +17,19 @@ pub enum JsonPrimitive {
 
 pub enum JsonValue {
     Primitive(JsonPrimitive),
-    Object(HashMap<String, Option<JsonValue>>),
+    Object(HashMap<String, JsonValue>),
     Array(Vec<JsonValue>),
 }
 
 pub fn parse_tokens(tokens: &[Token]){
     let mut state_stack: Vec<StateItem> = Vec::new();
     let mut parser_stack: Vec<JsonValue> = Vec::new();
+    let mut key_stack: Vec<String> = Vec::new();
 
     state_stack.push(StateItem::ExpectingValue);
 
     for token in tokens {
         let current_state = state_stack.last().unwrap();
-        
         match (current_state, &token) {
             (StateItem::ExpectingValue, Token::OpenBrace) => {
                 state_stack.pop();
@@ -40,9 +40,7 @@ pub fn parse_tokens(tokens: &[Token]){
             (StateItem::ExpectingKey, Token::StringContent(s)) => {
                 state_stack.pop();
                 state_stack.push(StateItem::ExpectingColon);
-                if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
-                    map.insert(s.clone(), None);
-                }
+                key_stack.push(s.clone());
             },
             (StateItem::ExpectingColon, Token::Colon) => {
                 state_stack.pop();
@@ -51,12 +49,24 @@ pub fn parse_tokens(tokens: &[Token]){
             (StateItem::ExpectingValue, Token::StringContent(s)) => {
                 state_stack.pop();
                 state_stack.push(StateItem::ExpectingCommaOrEnd);
-                if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
-                    let key = map.keys().last().unwrap().clone();
-                    map.insert(key, Some(JsonValue::Primitive(JsonPrimitive::String(s.clone()))));
+                if let Some(key) = key_stack.pop(){
+                    if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
+                        let value = JsonValue::Primitive(JsonPrimitive::String(s.clone()));
+                        map.insert(key, value);
+                    }
                 }
             },
-            _ => todo!(),
+            (StateItem::ExpectingValue, Token::Number(n)) => {
+                state_stack.pop();
+                state_stack.push(StateItem::ExpectingCommaOrEnd);
+                if let Some(key) = key_stack.pop(){
+                    if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
+                        let value = JsonValue::Primitive(JsonPrimitive::Number(n.clone()));
+                        map.insert(key, value);
+                    }
+                }
+            },
+            _ => { continue },
         }
     }
     
