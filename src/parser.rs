@@ -66,10 +66,17 @@ pub fn parse_tokens(tokens: &[Token]){
                     }
                 }
             },
+            (StateItem::ExpectingCommaOrEnd, Token::Comma) => {
+                state_stack.pop();
+                state_stack.push(StateItem::ExpectingKey);
+            },
+            (StateItem::ExpectingCommaOrEnd, Token::CloseBrace) => {
+                state_stack.pop();
+                state_stack.push(StateItem::ExpectingValue);
+            }
             _ => { continue },
         }
     }
-    
 }
 
 // fn token_to_state(token: &Token) -> StateItem {
