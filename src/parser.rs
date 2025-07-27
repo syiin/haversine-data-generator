@@ -7,7 +7,8 @@ pub enum StateItem {
     ExpectingKey,
     ExpectingColon,
     ExpectingValue,
-    ExpectingCommaOrEnd,
+    ExpectingCommaOrEndObject,
+    ExpectingCommaOrEndArray,
 }
 
 pub enum JsonPrimitive {
@@ -48,7 +49,7 @@ pub fn parse_tokens(tokens: &[Token]){
             },
             (StateItem::ExpectingValue, Token::StringContent(s)) => {
                 state_stack.pop();
-                state_stack.push(StateItem::ExpectingCommaOrEnd);
+                state_stack.push(StateItem::ExpectingCommaOrEndObject);
                 if let Some(key) = key_stack.pop(){
                     if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
                         let value = JsonValue::Primitive(JsonPrimitive::String(s.clone()));
@@ -58,7 +59,7 @@ pub fn parse_tokens(tokens: &[Token]){
             },
             (StateItem::ExpectingValue, Token::Number(n)) => {
                 state_stack.pop();
-                state_stack.push(StateItem::ExpectingCommaOrEnd);
+                state_stack.push(StateItem::ExpectingCommaOrEndObject);
                 if let Some(key) = key_stack.pop(){
                     if let Some(JsonValue::Object(map)) = parser_stack.last_mut() {
                         let value = JsonValue::Primitive(JsonPrimitive::Number(n.clone()));
@@ -66,11 +67,11 @@ pub fn parse_tokens(tokens: &[Token]){
                     }
                 }
             },
-            (StateItem::ExpectingCommaOrEnd, Token::Comma) => {
+            (StateItem::ExpectingCommaOrEndObject, Token::Comma) => {
                 state_stack.pop();
                 state_stack.push(StateItem::ExpectingKey);
             },
-            (StateItem::ExpectingCommaOrEnd, Token::CloseBrace) => {
+            (StateItem::ExpectingCommaOrEndObject, Token::CloseBrace) => {
                 state_stack.pop();
                 state_stack.push(StateItem::ExpectingValue);
             }
