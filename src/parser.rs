@@ -36,7 +36,6 @@ pub fn parse_tokens(tokens: &[Token]) -> Option<JsonValue> {
 
     for token in tokens {
         println!("Token: {:?}", token.format());
-
         let current_state = state_stack.last().unwrap();
         match (current_state, &token) {
             (StateItem::ExpectingValue | StateItem::ExpectingValueInObject | StateItem::ExpectingValueInArray, Token::OpenBrace) => {
@@ -79,23 +78,26 @@ pub fn parse_tokens(tokens: &[Token]) -> Option<JsonValue> {
                 state_stack.push(StateItem::ExpectingKey);
             },
             (StateItem::ExpectingCommaOrEndObject, Token::CloseBrace) => {
-                state_stack.pop(); 
-                state_stack.pop(); //Pop InObject - TODO: Er    // The object we just finished is on top of the parser stack.
-                if let Some(finished_object) = parser_stack.pop() {
-                    // Now, we must insert this finished object into its parent.
-                    // Check if this object was a value for a key in a parent object.
-                    if let Some(key) = key_stack.pop() {
-                        if let Some(JsonValue::Object(parent_map)) = parser_stack.last_mut() {
-                            parent_map.insert(key, finished_object);
+                state_stack.pop(); // ExpectingCommaOrEndObject
+                state_stack.pop(); // InObject
+
+                if let Some(finished_obj) = parser_stack.pop() {
+                    // Check the parent container (the new top of the stack) to decide what to do.
+                    if let Some(parent) = parser_stack.last_mut() {
+                        // Peek at parent
+                        match parent {
+                            JsonValue::Array(arr) => {
+                                arr.push(finished_obj);
+                            },
+                            JsonValue::Object(map) => {
+                                if let Some(key) = key_stack.pop() {
+                                    map.insert(key, finished_obj);
+                                }
+                            },
+                            _ => { panic!("Error: Expected array or object"); }
                         }
-                    } 
-                    // Otherwise, it must have been an element in a parent array.
-                    else if let Some(JsonValue::Array(parent_arr)) = parser_stack.last_mut() {
-                        parent_arr.push(finished_object);
-                    }
-                    // If neither, this was the root element. To return it, we need to push it back.
-                    else {
-                        parser_stack.push(finished_object);
+                    } else {
+                        parser_stack.push(finished_obj); // Is root object
                     }
                 }
             },
@@ -112,30 +114,33 @@ pub fn parse_tokens(tokens: &[Token]) -> Option<JsonValue> {
                 state_stack.push(StateItem::ExpectingValueInArray);
             },
             (StateItem::ExpectingCommaOrEndArray, Token::CloseBracket) => {
-                state_stack.pop(); // Pop ExpectingCommaOrEndArray
-                state_stack.pop(); // Pop InArray
+                state_stack.pop(); // ExpectingCommaOrEndArray
+                state_stack.pop(); // InArray
 
-                // The array we just finished is on top of the parser stack.
-                if let Some(finished_array) = parser_stack.pop() {
-                    // Now, we must insert this finished array into its parent.
-                    // Check if this array was a value for a key in a parent object.
-                    if let Some(key) = key_stack.pop() {
-                        if let Some(JsonValue::Object(parent_map)) = parser_stack.last_mut() {
-                            parent_map.insert(key, finished_array);
+                if let Some(finished_arr) = parser_stack.pop() {
+                    if let Some(parent) = parser_stack.last_mut() {
+                        // Peek at parent
+                        match parent {
+                            JsonValue::Array(arr) => {
+                                arr.push(finished_arr);
+                            },
+                            JsonValue::Object(map) => {
+                                if let Some(key) = key_stack.pop() {
+                                    map.insert(key, finished_arr);
+                                }
+                            },
+                            _ => { panic!("Error: Expected array or object"); }
                         }
-                    } 
-                    // Otherwise, it must have been an element in a parent array.
-                    else if let Some(JsonValue::Array(parent_arr)) = parser_stack.last_mut() {
-                        parent_arr.push(finished_array);
-                    }
-                    // If neither, this was the root element. To return it, we need to push it back.
-                    else {
-                        parser_stack.push(finished_array);
+                    } else {
+                        parser_stack.push(finished_arr); // is root
                     }
                 }
             },
             _ => continue,
         }
+        println!("State stack: {:?}", state_stack);
+        println!("Parser stack: {:?}", parser_stack);
+        println!("Key stack: {:?}", key_stack);
     }
 
     // while state_stack.len() > 1 {
