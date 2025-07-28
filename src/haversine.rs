@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{ Write, BufWriter };
+use std::io::{ Write, BufWriter, BufReader, Read, BufRead };
 use crate::generator::{ Pair };
 
 const DEGREES_TO_RADIANS: f64 = 0.01745329251994329577;
@@ -49,4 +49,40 @@ pub fn save_run_metrics(distances: &Vec<f64>, seed: u64, num_pairs: u64, cumu_di
     println!("Est Distance: {}", cumu_distance);
 
     Ok(())
+}
+
+pub fn read_distances_from_file(filename: &str) -> Result<Vec<f64>, Box<dyn std::error::Error>> {
+    let file = File::open(filename)?;
+    let mut reader = BufReader::new(file);
+    let mut distances = Vec::new();
+    
+    let mut buffer = [0u8; 8]; // f64 is 8 bytes
+    while reader.read_exact(&mut buffer).is_ok() {
+        let distance = f64::from_le_bytes(buffer);
+        distances.push(distance);
+    }
+    
+    Ok(distances)
+}
+
+pub fn read_run_metrics(filename: &str) -> Result<(u64, u64, f64), Box<dyn std::error::Error>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+    
+    let mut seed = 0;
+    let mut points = 0;
+    let mut est_distance = 0.0;
+    
+    for line in reader.lines() {
+        let line = line?;
+        if line.starts_with("Seed: ") {
+            seed = line[6..].parse()?;
+        } else if line.starts_with("Points: ") {
+            points = line[8..].parse()?;
+        } else if line.starts_with("Est Distance: ") {
+            est_distance = line[14..].parse()?;
+        }
+    }
+    
+    Ok((seed, points, est_distance))
 }

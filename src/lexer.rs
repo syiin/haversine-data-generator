@@ -77,7 +77,7 @@ pub fn parse_file(file: File) -> Vec<Token> {
                     in_string = true;
                 }
             }
-            b'0'..=b'9' | b'-' | b'.' => {
+            b'0'..=b'9' | b'-' | b'.' | b'e' | b'E' | b'+' => {
                 if in_string { 
                     string.push(byte as char);
                     continue;

@@ -6,19 +6,29 @@ mod haversine;
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 use generator::{ Pairs, Pair };
-use haversine::{ reference_haversine, save_run_metrics };
+use haversine::{ reference_haversine, save_run_metrics, read_distances_from_file, read_run_metrics };
 use lexer::{ parse_file };
 use parser::{ parse_tokens, JsonValue };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    generate_pairs()?;
+    // generate_pairs()?;
     let file = std::fs::File::open("haversine.json")?;
+    let (seed, points, est_distance) = read_run_metrics("haversine_metrics.txt")?;
     let tokens = parse_file(file);
+
+    println!("Seed: {}", seed);
+    println!("Points: {}", points);
+    println!("Est Distance: {}", est_distance);
 
     let json = parse_tokens(&tokens);
     if let Some(json_value) = json {
-        let distances = calculate_pairs(json_value);
-        println!("Distances: {:?}", distances);
+        let distances: Vec<f64> = calculate_pairs(json_value);
+        let actual_distance: f64 = distances.iter().sum();
+
+        println!("Actual Distance: {}", actual_distance);
+        println!("Expected Distance: {}", est_distance);
+        println!("Distance Difference: {}", (actual_distance - est_distance).abs());
+
     } else {
         println!("Error parsing JSON");
     }
@@ -56,7 +66,7 @@ fn get_number_from_json(json: &JsonValue) -> f64 {
 }
 
 fn generate_pairs() -> Result<(), Box<dyn std::error::Error>> {
-    let num_pairs = 2;
+    let num_pairs = 10000000;
     let mut cumu_distance: f64 = 0.0;
 
     let seed: u64 = rand::random();
