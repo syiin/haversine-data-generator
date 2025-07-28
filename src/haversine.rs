@@ -28,16 +28,16 @@ pub fn reference_haversine(pair: &Pair, earth_radius: f64) -> f64 {
 }
 
 
-pub fn save_run_metrics(distances: &Vec<f64>, seed: u64, num_pairs: u64, cumu_distance: f64) -> Result<(), Box<dyn std::error::Error>> {
+pub fn save_run_metrics(distances: &Vec<f64>, seed: u64, num_pairs: u64, cumu_distance: f64, metrics_output: &str, distance_output: &str) -> Result<(), Box<dyn std::error::Error>> {
     { 
-        let mut file = File::create("haversine_metrics.txt")?;
+        let mut file = File::create(metrics_output)?;
         writeln!(file, "Seed: {}", seed)?;
         writeln!(file, "Points: {}", num_pairs)?;
         writeln!(file, "Est Distance: {}", cumu_distance)?;
     }
 
     {
-        let file = File::create("haversine.f64")?;
+        let file = File::create(distance_output)?;
         let mut writer = BufWriter::new(file);
         for &distance in distances {
             writer.write_all(&distance.to_le_bytes())?;
