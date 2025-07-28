@@ -7,17 +7,20 @@ use rand::SeedableRng;
 use generator::{ Pairs, Pair };
 use generator::{ reference_haversine, save_run_metrics };
 use lexer::{ parse_file };
-use parser::{ parse_tokens };
+use parser::{ parse_tokens, format_json };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate_pairs()?;
     let file = std::fs::File::open("haversine.json")?;
     let tokens = parse_file(file);
-    println!("Token length: {}", tokens.len());
-    for token in &tokens {
-        println!("{}", token.format());
-    }
-    parse_tokens(&tokens);
+    // println!("Token length: {}", tokens.len());
+    // for token in &tokens {
+    //     println!("{}", token.format());
+    // }
+    let json = parse_tokens(&tokens);
+    let formatted = format_json(json.as_ref().unwrap());
+    println!("{}", formatted);
+    
     Ok(())
 }
 
