@@ -35,10 +35,17 @@ pub fn read_os_timer() -> u64 {
 #[inline]
 pub unsafe fn read_cpu_timer() -> u64 {
   #[cfg(target_arch = "aarch64")]
+  use std::arch::asm;
   {
-    use std::arch::aarch64::__rdtcnt_el0;
-    return __rdtcnt_el0();
-  
+    let cycles: u64;
+    unsafe {
+          asm!(
+              "mrs {0}, cntpct_el0",
+              out(reg) cycles,
+              options(nostack, nomem)
+          );
+      }
+    cycles
   }
 
   #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -48,7 +55,7 @@ pub unsafe fn read_cpu_timer() -> u64 {
   }
 }
 pub fn estimate_cpu_timer_freq() -> u64 {
-  let ms_to_wait = 100;
+  let ms_to_wait = 1000;
   let os_freq = get_os_timer_frequency();
   
   let cpu_start = unsafe { read_cpu_timer()} ;
@@ -65,11 +72,9 @@ pub fn estimate_cpu_timer_freq() -> u64 {
   let cpu_elapsed = cpu_end - cpu_start;
 
   let mut cpu_freq = 0;
-  if (os_elapsed > 0){
+  if os_elapsed > 0 {
     cpu_freq = os_freq * cpu_elapsed / os_elapsed;
   }
   
-
   return cpu_freq;
-
 }
