@@ -11,7 +11,7 @@ use generator::{ Pairs, Pair };
 use haversine::{ reference_haversine, save_run_metrics, read_run_metrics };
 use lexer::{ parse_file };
 use parser::{ parse_tokens, JsonValue };
-use timer::{ read_cpu_timer };
+use timer::{ read_cpu_timer, estimate_cpu_timer_freq };
 
 
 
@@ -67,12 +67,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Some(Command::Calculate { input_file, metrics_file }) => {
             prof_read = unsafe { read_cpu_timer() };
-
             let file = std::fs::File::open(input_file)?;
             let (seed, points, est_distance) = read_run_metrics(metrics_file)?;
             
             prof_misc_setup = unsafe { read_cpu_timer() };
-
             let tokens = parse_file(file);
 
             println!("Seed: {}", seed);
@@ -97,6 +95,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let prof_end = unsafe { read_cpu_timer() };
             let total_cpu_elapsed = prof_end - prof_begin;
+
+            let cpu_freq = estimate_cpu_timer_freq();
+
+            println!("Total time: {} \n(CPU freq: {}) \n ", 1000 * total_cpu_elapsed / cpu_freq, cpu_freq );
 
             print_time_elapsed("Startup", total_cpu_elapsed, prof_begin, prof_read);
             print_time_elapsed("Read", total_cpu_elapsed, prof_read, prof_misc_setup);

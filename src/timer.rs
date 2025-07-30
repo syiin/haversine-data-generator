@@ -47,3 +47,29 @@ pub unsafe fn read_cpu_timer() -> u64 {
     return _rdtsc();
   }
 }
+pub fn estimate_cpu_timer_freq() -> u64 {
+  let ms_to_wait = 100;
+  let os_freq = get_os_timer_frequency();
+  
+  let cpu_start = unsafe { read_cpu_timer()} ;
+  let os_start = read_os_timer();
+  let mut os_end;
+  let mut os_elapsed = 0;
+  let os_wait_time = os_freq * ms_to_wait / 1000;
+  while(os_elapsed < os_wait_time){
+    os_end = read_os_timer();
+    os_elapsed = os_end - os_start;
+  }
+
+  let cpu_end = unsafe { read_cpu_timer() };
+  let cpu_elapsed = cpu_end - cpu_start;
+
+  let mut cpu_freq = 0;
+  if (os_elapsed > 0){
+    cpu_freq = os_freq * cpu_elapsed / os_elapsed;
+  }
+  
+
+  return cpu_freq;
+
+}
