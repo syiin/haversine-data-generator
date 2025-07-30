@@ -13,8 +13,6 @@ use lexer::{ parse_file };
 use parser::{ parse_tokens, JsonValue };
 use timer::{ read_cpu_timer, estimate_cpu_timer_freq };
 
-
-
 #[derive(Parser, Debug)]
 #[command(
     author = "Your Name",
@@ -137,21 +135,18 @@ fn calculate_pairs(json: JsonValue) -> Vec<f64> {
     let JsonValue::Object(map) = json else { return Vec::new(); };
     let JsonValue::Array(pairs_array) = map.get("pairs").expect("Error getting pairs array") else { return Vec::new(); };
 
-    let mut distances: Vec<f64> = Vec::new();
+    let mut distances: Vec<f64> = Vec::with_capacity(pairs_array.len());
     for pair in pairs_array {
         let JsonValue::Object(pair_map) = pair else { continue; };
-        let x0 = pair_map.get("x0").unwrap();
-        let y0 = pair_map.get("y0").unwrap();
-        let x1 = pair_map.get("x1").unwrap();
-        let y1 = pair_map.get("y1").unwrap();
 
-        let pair = Pair::new(
-            get_number_from_json(x0), 
-            get_number_from_json(y0), 
-            get_number_from_json(x1), 
-            get_number_from_json(y1)
+        let distance = reference_haversine(
+            &Pair::new(
+                get_number_from_json(pair_map.get("x0").unwrap()), 
+                get_number_from_json(pair_map.get("y0").unwrap()), 
+                get_number_from_json(pair_map.get("x1").unwrap()), 
+                get_number_from_json(pair_map.get("y1").unwrap())
+            ), 6372.8
         );
-        let distance = reference_haversine(&pair, 6372.8);
         distances.push(distance);
     }
     return distances;
