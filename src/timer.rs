@@ -2,7 +2,7 @@
 
 // Imports for macOS specific OS timer (SystemTime)
 #[cfg(target_os = "macos")]
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 // Imports for Linux specific OS timer (libc)
 #[cfg(target_os = "linux")]
