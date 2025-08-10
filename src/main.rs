@@ -1,17 +1,17 @@
 mod generator;
-mod parser;
-mod lexer;
 mod haversine;
+mod lexer;
+mod parser;
+mod profiler;
 mod timer;
 
-use clap::{Parser, Subcommand, Arg};
-use rand::rngs::SmallRng;
+use clap::{Parser, Subcommand};
+use generator::{Pair, Pairs};
+use haversine::{read_run_metrics, reference_haversine, save_run_metrics};
+use lexer::parse_file;
+use parser::{JsonValue, parse_tokens};
 use rand::SeedableRng;
-use generator::{ Pairs, Pair };
-use haversine::{ reference_haversine, save_run_metrics, read_run_metrics };
-use lexer::{ parse_file };
-use parser::{ parse_tokens, JsonValue };
-use timer::{ read_cpu_timer, estimate_cpu_timer_freq };
+use rand::rngs::SmallRng;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -47,64 +47,54 @@ enum Command {
         /// Metrics file containing expected values for validation
         #[arg(help = "Path to metrics file with expected distance values")]
         metrics_file: String,
-    }
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let prof_begin = unsafe { read_cpu_timer() };
-    let mut prof_read = 0;
-    let mut prof_misc_setup = 0;
-    let mut prof_sum = 0;
-    let mut prof_misc_output = 0;
+    profile_block!("Total Time");
 
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Command::Generate { output_file , metrics_output, distance_output}) => {
+        Some(Command::Generate {
+            output_file,
+            metrics_output,
+            distance_output,
+        }) => {
             generate_pairs(output_file, metrics_output, distance_output)?;
-        },
-        Some(Command::Calculate { input_file, metrics_file }) => {
-            prof_read = unsafe { read_cpu_timer() };
+        }
+        Some(Command::Calculate {
+            input_file,
+            metrics_file,
+        }) => {
             let file = std::fs::File::open(input_file)?;
             let (seed, points, est_distance) = read_run_metrics(metrics_file)?;
-            
-            prof_misc_setup = unsafe { read_cpu_timer() };
+
             let tokens = parse_file(file);
 
             println!("Seed: {}", seed);
             println!("Points: {}", points);
             println!("Est Distance: {}", est_distance);
 
-            let prof_parse = unsafe { read_cpu_timer() };
+            profile_block!("misc setup");
             let json = parse_tokens(&tokens);
             if let Some(json_value) = json {
                 let distances: Vec<f64> = calculate_pairs(json_value);
-                
-                prof_sum = unsafe { read_cpu_timer() };
+
                 let actual_distance: f64 = distances.iter().sum();
 
-                prof_misc_output = unsafe { read_cpu_timer() };
                 println!("Actual Distance: {}", actual_distance);
                 println!("Expected Distance: {}", est_distance);
-                println!("Distance Difference: {}", (actual_distance - est_distance).abs());
+                println!(
+                    "Distance Difference: {}",
+                    (actual_distance - est_distance).abs()
+                );
             } else {
                 println!("Error parsing JSON");
             }
 
-            let prof_end = unsafe { read_cpu_timer() };
-            let total_cpu_elapsed = prof_end - prof_begin;
-
-            let cpu_freq = estimate_cpu_timer_freq();
-
-            println!("Total time: {} \n(CPU freq: {}) \n ", 1000 * total_cpu_elapsed / cpu_freq, cpu_freq );
-
-            print_time_elapsed("Startup", total_cpu_elapsed, prof_begin, prof_read);
-            print_time_elapsed("Read", total_cpu_elapsed, prof_read, prof_misc_setup);
-            print_time_elapsed("Misc Setup", total_cpu_elapsed, prof_misc_setup, prof_parse);
-            print_time_elapsed("Parse", total_cpu_elapsed, prof_parse, prof_sum);
-            print_time_elapsed("Sum", total_cpu_elapsed, prof_sum, prof_misc_output);
-            print_time_elapsed("Misc Output", total_cpu_elapsed, prof_misc_output, prof_end);
-        },
+            profiler::KEEPER.report();
+        }
         None => {
             println!("Haversine Data Generator");
             println!("========================");
@@ -122,30 +112,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!();
             println!("Examples:");
             println!("  {} generate data.json", env!("CARGO_PKG_NAME"));
-            println!("  {} calculate data.json metrics.json", env!("CARGO_PKG_NAME"));
+            println!(
+                "  {} calculate data.json metrics.json",
+                env!("CARGO_PKG_NAME")
+            );
             println!();
-            println!("For more information, run: {} --help", env!("CARGO_PKG_NAME"));
+            println!(
+                "For more information, run: {} --help",
+                env!("CARGO_PKG_NAME")
+            );
         }
     }
-    
+
     Ok(())
 }
 
 fn calculate_pairs(json: JsonValue) -> Vec<f64> {
-    let JsonValue::Object(map) = json else { return Vec::new(); };
-    let JsonValue::Array(pairs_array) = map.get("pairs").expect("Error getting pairs array") else { return Vec::new(); };
+    profile_block!("Calculate pairs");
+    let JsonValue::Object(map) = json else {
+        return Vec::new();
+    };
+    let JsonValue::Array(pairs_array) = map.get("pairs").expect("Error getting pairs array") else {
+        return Vec::new();
+    };
 
     let mut distances: Vec<f64> = Vec::with_capacity(pairs_array.len());
     for pair in pairs_array {
-        let JsonValue::Object(pair_map) = pair else { continue; };
+        let JsonValue::Object(pair_map) = pair else {
+            continue;
+        };
 
         let distance = reference_haversine(
             &Pair::new(
-                get_number_from_json(pair_map.get("x0").unwrap()), 
-                get_number_from_json(pair_map.get("y0").unwrap()), 
-                get_number_from_json(pair_map.get("x1").unwrap()), 
-                get_number_from_json(pair_map.get("y1").unwrap())
-            ), 6372.8
+                get_number_from_json(pair_map.get("x0").unwrap()),
+                get_number_from_json(pair_map.get("y0").unwrap()),
+                get_number_from_json(pair_map.get("x1").unwrap()),
+                get_number_from_json(pair_map.get("y1").unwrap()),
+            ),
+            6372.8,
         );
         distances.push(distance);
     }
@@ -153,11 +157,17 @@ fn calculate_pairs(json: JsonValue) -> Vec<f64> {
 }
 
 fn get_number_from_json(json: &JsonValue) -> f64 {
-    let JsonValue::Number(n) = json else { return 0.0; };
+    let JsonValue::Number(n) = json else {
+        return 0.0;
+    };
     return *n;
 }
 
-fn generate_pairs(file_path: &str, metrics_output: &str, distance_output: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn generate_pairs(
+    file_path: &str,
+    metrics_output: &str,
+    distance_output: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let num_pairs = 10000000;
     let mut cumu_distance: f64 = 0.0;
 
@@ -176,13 +186,16 @@ fn generate_pairs(file_path: &str, metrics_output: &str, distance_output: &str) 
     }
 
     let _ = pairs.save_to_file(file_path);
-    let _ = save_run_metrics(&distances, seed, num_pairs, cumu_distance, metrics_output, distance_output);
+    let _ = save_run_metrics(
+        &distances,
+        seed,
+        num_pairs,
+        cumu_distance,
+        metrics_output,
+        distance_output,
+    );
 
     Ok(())
 }
 
-fn print_time_elapsed(label: &str, total_cpu_elapsed: u64, prof_begin: u64, prof_end: u64) {
-    let elapsed: f64 = prof_end as f64 - prof_begin as f64;
-    let percent: f64 = 100.0 * (elapsed / total_cpu_elapsed as f64);
-    println!("{}: {}, ({}%)", label, elapsed, percent);
-}
+

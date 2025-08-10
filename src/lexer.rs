@@ -1,6 +1,8 @@
 use std::fs::File;
-use std::io::{self, BufReader, BufRead, Read};
+use std::io::{BufReader, Read};
 use std::string::String;
+
+use crate::profile_block;
 
 #[derive(Clone)]
 pub enum Token {
@@ -34,6 +36,7 @@ impl Token {
 }
 
 pub fn parse_file(file: File) -> Vec<Token> {
+    profile_block!("Parse file");
     let mut output = Vec::new();
 
     let mut string = String::new();
@@ -67,7 +70,7 @@ pub fn parse_file(file: File) -> Vec<Token> {
             b',' => {
                 handle_digit_termination(&mut output, &mut digit, &mut in_digit);
                 output.push(Token::Comma);
-            },
+            }
             b'"' => {
                 if in_string {
                     output.push(Token::StringContent(string.clone()));
@@ -78,7 +81,7 @@ pub fn parse_file(file: File) -> Vec<Token> {
                 }
             }
             b'0'..=b'9' | b'-' | b'.' | b'e' | b'E' | b'+' => {
-                if in_string { 
+                if in_string {
                     string.push(byte as char);
                     continue;
                 }
@@ -90,13 +93,13 @@ pub fn parse_file(file: File) -> Vec<Token> {
                     string.push(byte as char);
                 }
                 continue;
-            },
+            }
         }
     }
     return output;
 }
 
-pub fn handle_digit_termination(output: &mut Vec<Token>, digit: &mut String, in_digit: &mut bool){
+pub fn handle_digit_termination(output: &mut Vec<Token>, digit: &mut String, in_digit: &mut bool) {
     if !digit.is_empty() {
         if let Ok(n) = digit.parse() {
             output.push(Token::Number(n));
