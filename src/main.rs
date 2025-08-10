@@ -76,7 +76,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Points: {}", points);
             println!("Est Distance: {}", est_distance);
 
-            profile_block!("misc setup");
             let json = parse_tokens(&tokens);
             if let Some(json_value) = json {
                 let distances: Vec<f64> = calculate_pairs(json_value);
