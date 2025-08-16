@@ -1,10 +1,12 @@
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use crate::timer::{estimate_cpu_timer_freq, read_cpu_timer};
 
 pub struct RecordKeeper {
     global_start: u64,
     block_profilers: Mutex<Vec<BlockProfiler>>,
+    global_idx: AtomicU64,
 }
 
 pub static KEEPER : Lazy<RecordKeeper> = Lazy::new(RecordKeeper::new);
@@ -14,6 +16,7 @@ impl RecordKeeper {
         RecordKeeper {
             global_start: unsafe { read_cpu_timer() },
             block_profilers: Mutex::new(Vec::new()),
+            global_idx: AtomicU64::new(0),
         }
     }
 
@@ -44,15 +47,27 @@ impl RecordKeeper {
                  total_duration as f64 * 1000.0 / cpu_freq as f64, total_duration);
 
         for record in records.iter() {
-            let percentage = if total_duration > 0 {
-                (record.duration as f64 / total_duration as f64) * 100.0
+            let inclusive_duration = record.duration;
+            let exclusive_duration = record.duration.saturating_sub(record.child_duration);
+
+            let inclusive_percentage = if total_duration > 0 {
+                (inclusive_duration as f64 / total_duration as f64) * 100.0
             } else {
                 0.0
             };
-            let duration_ms = record.duration as f64 * 1000.0 / cpu_freq as f64;
+
+            let exclusive_percentage = if total_duration > 0 {
+                (exclusive_duration as f64 / total_duration as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            let inclusive_ms = inclusive_duration as f64 * 1000.0 / cpu_freq as f64;
+            let exclusive_ms = exclusive_duration as f64 * 1000.0 / cpu_freq as f64;
+
             println!(
-                "- {:<30} | Time: {:>10.2} ms | Cycles: {:>12} | Percentage: {:>5.1}%",
-                record.name, duration_ms, record.duration, percentage
+                "- {:<30} | Inclusive: {:>8.2} ms ({:>5.1}%) | Exclusive: {:>8.2} ms ({:>5.1}%)",
+                record.name, inclusive_ms, inclusive_percentage, exclusive_ms, exclusive_percentage
             );
         }
 
@@ -65,16 +80,23 @@ impl RecordKeeper {
 pub struct BlockProfiler {
     name: String,
     start: u64,
+    parent_idx: usize,
     idx: usize,
+    child_duration: u64,
     duration: u64,
 }
 
 impl BlockProfiler {
     pub fn new(name: &str) -> Self {
+        KEEPER.global_idx.fetch_add(1, Ordering::SeqCst);
+
+        let current_idx = KEEPER.block_profilers.lock().unwrap().len();
         BlockProfiler {
             name: name.to_string(),
             start: unsafe { read_cpu_timer() },
-            idx: KEEPER.block_profilers.lock().unwrap().len(),
+            parent_idx: if current_idx > 0 { current_idx - 1 } else { 0 },
+            idx: current_idx,
+            child_duration: 0,
             duration: 0,
         }
     }
@@ -82,9 +104,21 @@ impl BlockProfiler {
 
 impl Drop for BlockProfiler {
     fn drop(&mut self) {
+        let duration = unsafe { read_cpu_timer() } - self.start;
+
+        // Update this profiler's duration
         KEEPER.with_block_profiler(self.idx, |block_profiler| {
-            block_profiler.duration = unsafe { read_cpu_timer() } - self.start;
+            block_profiler.duration = duration;
         });
+
+        // Update parent's child duration (only if this isn't the root profiler)
+        if self.idx > 0 {
+            KEEPER.with_block_profiler(self.parent_idx, |block_profiler| {
+                block_profiler.child_duration += duration;
+            });
+        }
+
+        KEEPER.global_idx.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
