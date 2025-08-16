@@ -67,7 +67,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input_file,
             metrics_file,
         }) => {
-            let file = std::fs::File::open(input_file)?;
+            let file = {
+                profile_block!("ReadEntireFile");
+                std::fs::File::open(input_file)?
+            };
             let (seed, points, est_distance) = read_run_metrics(metrics_file)?;
 
             let tokens = parse_file(file);
@@ -80,7 +83,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(json_value) = json {
                 let distances: Vec<f64> = calculate_pairs(json_value);
 
-                let actual_distance: f64 = distances.iter().sum();
+                let actual_distance: f64 = {
+                    profile_block!("SumHaversineDistances");
+                    distances.iter().sum()
+                };
 
                 println!("Actual Distance: {}", actual_distance);
                 println!("Expected Distance: {}", est_distance);
@@ -131,7 +137,11 @@ fn calculate_pairs(json: JsonValue) -> Vec<f64> {
     let JsonValue::Object(map) = json else {
         return Vec::new();
     };
-    let JsonValue::Array(pairs_array) = map.get("pairs").expect("Error getting pairs array") else {
+    let pairs_array = {
+        profile_block!("ParseHaversinePairs");
+        map.get("pairs").expect("Error getting pairs array")
+    };
+    let JsonValue::Array(pairs_array) = pairs_array else {
         return Vec::new();
     };
 
@@ -141,13 +151,17 @@ fn calculate_pairs(json: JsonValue) -> Vec<f64> {
             continue;
         };
 
-        let distance = reference_haversine(
-            &Pair::new(
+        let (x0, y0, x1, y1) = {
+            (
                 get_number_from_json(pair_map.get("x0").unwrap()),
                 get_number_from_json(pair_map.get("y0").unwrap()),
                 get_number_from_json(pair_map.get("x1").unwrap()),
                 get_number_from_json(pair_map.get("y1").unwrap()),
-            ),
+            )
+        };
+
+        let distance = reference_haversine(
+            &Pair::new(x0, y0, x1, y1),
             6372.8,
         );
         distances.push(distance);
