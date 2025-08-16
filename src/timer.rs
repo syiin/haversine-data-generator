@@ -36,17 +36,17 @@ pub fn read_os_timer() -> u64 {
 pub unsafe fn read_cpu_timer() -> u64 {
   #[cfg(target_arch = "aarch64")]
   use std::arch::asm;
-  {
-    let cycles: u64;
-    unsafe {
-          asm!(
-              "mrs {0}, cntpct_el0",
-              out(reg) cycles,
-              options(nostack, nomem)
-          );
-      }
-    cycles
-  }
+  // {
+  //   let cycles: u64;
+  //   unsafe {
+  //         asm!(
+  //             "mrs {0}, cntpct_el0",
+  //             out(reg) cycles,
+  //             options(nostack, nomem)
+  //         );
+  //     }
+  //   cycles;
+  // }
 
   #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
   {

@@ -2,14 +2,9 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use crate::timer::{estimate_cpu_timer_freq, read_cpu_timer};
 
-pub struct TimeRecord {
-    name: String,
-    duration: u64,
-}
-
 pub struct RecordKeeper {
     global_start: u64,
-    records: Mutex<Vec<TimeRecord>>,
+    block_profilers: Mutex<Vec<BlockProfiler>>,
 }
 
 pub static KEEPER : Lazy<RecordKeeper> = Lazy::new(RecordKeeper::new);
@@ -18,17 +13,29 @@ impl RecordKeeper {
     pub fn new() -> Self {
         RecordKeeper {
             global_start: unsafe { read_cpu_timer() },
-            records: Mutex::new(Vec::new()),
+            block_profilers: Mutex::new(Vec::new()),
         }
     }
 
-    pub fn insert_record(&self, record: TimeRecord) {
-        let mut records = self.records.lock().unwrap();
-        records.push(record);
+    pub fn insert_block_profiler(&self, block_profiler: BlockProfiler) {
+        let mut block_profilers = self.block_profilers.lock().unwrap();
+        block_profilers.push(block_profiler);
+    }
+
+    pub fn with_block_profiler<F, R>(&self, idx: usize, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut BlockProfiler) -> R,
+    {
+        let mut block_profilers = self.block_profilers.lock().unwrap();
+        if idx < block_profilers.len() {
+            Some(f(&mut block_profilers[idx]))
+        } else {
+            None
+        }
     }
 
     pub fn report(&self) {
-        let records = self.records.lock().unwrap();
+        let records = self.block_profilers.lock().unwrap();
         let total_duration = unsafe { read_cpu_timer() } - self.global_start;
         let cpu_freq = estimate_cpu_timer_freq();
 
@@ -54,9 +61,12 @@ impl RecordKeeper {
     }
 }
 
+#[derive(Clone)]
 pub struct BlockProfiler {
     name: String,
     start: u64,
+    idx: usize,
+    duration: u64,
 }
 
 impl BlockProfiler {
@@ -64,26 +74,29 @@ impl BlockProfiler {
         BlockProfiler {
             name: name.to_string(),
             start: unsafe { read_cpu_timer() },
+            idx: KEEPER.block_profilers.lock().unwrap().len(),
+            duration: 0,
         }
     }
 }
 
 impl Drop for BlockProfiler {
     fn drop(&mut self) {
-        let report = TimeRecord {
-            name: self.name.clone(),
-            duration: unsafe { read_cpu_timer() } - self.start,
-        };
-        KEEPER.insert_record(report);
+        KEEPER.with_block_profiler(self.idx, |block_profiler| {
+            block_profiler.duration = unsafe { read_cpu_timer() } - self.start;
+        });
     }
 }
+
 
 #[macro_export]
 macro_rules! profile_block {
     ($name:expr) => {
         let _profiler = crate::profiler::BlockProfiler::new($name);
+        crate::profiler::KEEPER.insert_block_profiler(_profiler.clone());
     };
     () => {
         let _profiler = crate::profiler::BlockProfiler::new(format!("{}:{}", file!(), line!()));
+        crate::profiler::KEEPER.insert_block_profiler(_profiler.clone());
     };
 }
